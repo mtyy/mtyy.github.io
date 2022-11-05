@@ -3,25 +3,36 @@
 <title>Kehamõõdud</title>
 <style>
     body {
+        margin: auto;
+        max-width: 400px;
         background-color: #222222;
         color: white;
-        padding: 10%;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+        margin-top: 10%;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: 500;
+        font-size: larger;
     }
 
     input {
         color: white;
         background-color: black;
         width: 100%;
-        margin-top: 8px;
+        margin-bottom: 12px;
+        margin-top: 4px;
+        font-size: larger;
     }
 
-    button {
-        margin-right: -4px;
+    h1 {
+        text-align: center;
     }
 
-    .sisend {
-        width: 210px;
+    .blocc {
+        height: 40px;
+        margin-top: 20px;
+        width: 100%;
+        text-transform: uppercase;
+        font-weight: 800;
+        font-size: medium;
     }
 
     #tulemus {
@@ -35,13 +46,17 @@
     <p>
         <div class="sisend">
             <div class="sisendiValjad">
-                <input placeholder="kael" value="38" id="kael">kael cm
-                <input placeholder="vöö" value="90" id="vöö">vöö cm
-                <input placeholder="kaal" value="89" id="kaal">kaal kg
-                <input placeholder="pikkus" value="194" id="pikkus">pikkus cm
+                kael cm
+                <input placeholder="kael" value="38" id="kael">
+                vöö cm
+                <input placeholder="vöö" value="90" id="vöö">
+                kaal kg
+                <input placeholder="kaal" value="89" id="kaal">
+                pikkus cm
+                <input placeholder="pikkus" value="194" id="pikkus">
             </div>
-            <div style="float:right;">
-                <button type="button" id="confirmBtn" onclick="arvuta();">Arvuta</button>
+            <div>
+                <button class="blocc" type="button" id="confirmBtn" onclick="arvuta();">Arvuta</button>
             </div>
         </div>
     </p>
@@ -64,9 +79,9 @@
 
 
         document.getElementById("tulemus").innerHTML =
-            "<br>rasvaprotsent: " + formatNr(rasvaProtsent) + " %"
-            + "<br>pekk: " + formatNr(pekk) + " kg"
-            + "<br>muu mass: " + formatNr(leanMass) + " kg"
+            "<br>Rasvaprotsent: " + formatNr(rasvaProtsent) + " %"
+            + "<br>Pekk: " + formatNr(pekk) + " kg"
+            + "<br>Muu mass: " + formatNr(leanMass) + " kg"
             + "<br>BMI: " + formatNr(kaal / Math.pow(pikkus / 100, 2));
     }
 
