@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<title>Kehamõõdud</title>
+<style>
+    body {
+        background-color: #222222;
+        color: white;
+        padding: 10%;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+    }
+
+    input {
+        color: white;
+        background-color: black;
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    button {
+        margin-right: -4px;
+    }
+
+    .sisend {
+        width: 210px;
+    }
+
+    #tulemus {
+        margin-top: 20px;
+    }
+</style>
+
+
+<body>
+    <h1>Kehamõõdud</h1>
+    <p>
+        <div class="sisend">
+            <div class="sisendiValjad">
+                <input placeholder="kael" value="38" id="kael">kael cm
+                <input placeholder="vöö" value="90" id="vöö">vöö cm
+                <input placeholder="kaal" value="89" id="kaal">kaal kg
+                <input placeholder="pikkus" value="194" id="pikkus">pikkus cm
+            </div>
+            <div style="float:right;">
+                <button type="button" id="confirmBtn" onclick="arvuta();">Arvuta</button>
+            </div>
+        </div>
+    </p>
+    <p id="tulemus"></p>
+</body>
+
+<script>
+
+    function arvuta() {
+        var voo = document.getElementById("vöö").value;
+        var kael = document.getElementById("kael").value;
+        var pikkus = document.getElementById("pikkus").value;
+        var kaal = document.getElementById("kaal").value;
+
+
+        var rasvaProtsent = 495 / (1.0324 - 0.19077 * Math.log10(voo - kael) + 0.15456 * Math.log10(pikkus)) - 450;
+        var pekk = rasvaProtsent * kaal / 100;
+        var leanMass = kaal - pekk;
+
+
+
+        document.getElementById("tulemus").innerHTML =
+            "<br>rasvaprotsent: " + formatNr(rasvaProtsent) + " %"
+            + "<br>pekk: " + formatNr(pekk) + " kg"
+            + "<br>muu mass: " + formatNr(leanMass) + " kg"
+            + "<br>BMI: " + formatNr(kaal / Math.pow(pikkus / 100, 2));
+    }
+
+    function formatNr(number) {
+        return parseFloat(number).toFixed(1);
+    }
+
+</script>
+
+</html>
