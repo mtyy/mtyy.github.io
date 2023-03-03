@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html>
-<title>ReleaseBot</title>
+<title>ReleaseBoot</title>
 <style>
     body {
         margin: 2%;
@@ -27,30 +27,29 @@
         text-align: center;
     }
 
-    a {        
+    a {
         color: rgb(215, 215, 215);
     }
 
-    #tulemus {
-        margin-top: 20px;
+    #results {
+        word-spacing: 10px;
     }
 </style>
 
 
-<body
-    onload="initialize()">
-    <h1>ReleaseBot</h1>
+<body onload="initialize()">
+    <h1>ReleaseBoot</h1>
     <p>
-        <div >
-            <div >
-                Youll release mail:
-                <input id="mail" onkeyup="generateLinks()">
-                With cloud:
-                <input id="cloud" onkeyup="generateLinks()">
-                With libs:
-                <input id="libs" onkeyup="generateLinks()">
-            </div>
+    <div>
+        <div>
+            Youll release mail:
+            <input id="mail" value=7.20 onkeyup="generateLinks()">
+            With cloud:
+            <input id="cloud" onkeyup="generateLinks()">
+            With libs:
+            <input id="libs" onkeyup="generateLinks()">
         </div>
+    </div>
     </p>
     <p id="results"></p>
 
@@ -73,39 +72,27 @@
         const mailMajor = parseInt(mail.split('.')[0])
         const mailMinor = parseInt(mail.split('.')[1])
         const currentMail = `${mailMajor}.${mailMinor}`
-        const previousMail = `${mailMajor}.${mailMinor-1}`
+        const previousMail = `${mailMajor}.${mailMinor - 1}`
 
         const cloudMajor = parseInt(cloud.split('.')[0])
         const cloudMinor = parseInt(cloud.split('.')[1])
         const currentCloud = `${cloudMajor}.${cloudMinor}`
-        const previousCloud = `${cloudMajor}.${cloudMinor-1}`
+        const previousCloud = `${cloudMajor}.${cloudMinor - 1}`
 
         const libsMajor = parseInt(libs.split('.')[0])
         const libsMinor = parseInt(libs.split('.')[1])
         const currentLibs = `${libsMajor}.${libsMinor}`
-        const previousLibs = `${libsMajor}.${libsMinor-1}`
+        const previousLibs = `${libsMajor}.${libsMinor - 1}`
 
-        
 
-        addText("Mail links:")
-        addLink(`https://git.mam.dev/android/k9ui/-/blob/development/build.gradle`)
-        addLink(`https://git.mam.dev/android/k9ui/-/blob/release/release_${previousMail}/build.gradle`)
-        addLink(`https://git.mam.dev/android/k9ui/-/blob/release/release_${currentMail}/build.gradle`)
-        br()
 
-        addText("Cloud links:")
-        addLink(`https://git.mam.dev/android/andonlinestorage/-/blob/development/build.gradle`)
-        addLink(`https://git.mam.dev/android/andonlinestorage/-/blob/release/release_${previousCloud}/build.gradle`)
-        addLink(`https://git.mam.dev/android/andonlinestorage/-/blob/release/release_${currentCloud}/build.gradle`)
-        br()
+        buildRepo("Mail", "https://git.mam.dev/android/k9ui/", "development", `release/release_${currentMail}`, `release/release_${previousMail}`)
+        buildRepo("Cloud", "https://git.mam.dev/android/andonlinestorage/", "development", `release/release_${currentCloud}`, `release/release_${previousCloud}`)
+        buildRepo("Libs", "https://git.mam.dev/android/libs/", "development", `release/release_${currentLibs}`, `release/release_${previousLibs}`)
 
-        addText("Libs links:")
-        addLink(`https://git.mam.dev/android/libs/-/blob/development/build.gradle`)
-        addLink(`https://git.mam.dev/android/libs/-/blob/release/release_${previousLibs}/build.gradle`)
-        addLink(`https://git.mam.dev/android/libs/-/blob/release/release_${currentLibs}/build.gradle`)
-        br()
 
         addText("Diffs:")
+        br()
         addLink(`https://git.mam.dev/android/k9ui/-/compare/release%2Frelease_${previousMail}...release%2Frelease_${currentMail}?from_project_id=303&straight=false`)
         addLink(`https://git.mam.dev/android/andonlinestorage/-/compare/release%2Frelease_${previousCloud}...release%2Frelease_${currentCloud}?from_project_id=292&straight=false`)
         addLink(`https://git.mam.dev/android/libs/-/compare/release%2Frelease_${previousLibs}...release%2Frelease_${currentLibs}?from_project_id=4146&straight=false`)
@@ -115,29 +102,57 @@
     }
 
     function addText(text) {
-        getP().appendChild(document.createTextNode(text));
+        getP().appendChild(document.createTextNode(`${text} `));
+    }
+
+    function buildRepo(name, baseurl, dev, release, previousRelease) {
+        addText(name)
         br()
+        addLink(`build.gradle`, `${baseurl}-/blob/${dev}/build.gradle`)
+        addLink(`Commits`, `${baseurl}-/commits/${dev}`)
+        addLink(`Graph`, `${baseurl}-/network/${dev}`)
+        addText(dev)
+
+
+        br()
+        addLink(`build.gradle`, `${baseurl}-/blob/${previousRelease}/build.gradle`)
+        addLink(`Commits`, `${baseurl}-/commits/${previousRelease}`)
+        addLink(`Graph`, `${baseurl}-/network/${previousRelease}`)
+        addText(previousRelease)
+
+        br()
+
+        addLink(`build.gradle`, `${baseurl}-/blob/${release}/build.gradle`)
+        addLink(`Commits`, `${baseurl}-/commits/${release}`)
+        addLink(`Graph`, `${baseurl}-/network/${release}`)
+        addText(release)
+        br()
+        addLink('Pipelines', `${baseurl}-/pipelines`)
+
+        br()
+        br()
+
     }
 
 
-    function addLink(address) {
+    function addLink(name, address) {
         // Create anchor element.
-        var a = document.createElement('a');        
+        var a = document.createElement('a');
         // Create the text node for anchor element.
-        var link = document.createTextNode(address.replace("https://git.mam.dev/android/", ""));
+        var link = document.createTextNode(name);
 
         // Append the text node to anchor element.
-        a.appendChild(link); 
+        a.appendChild(link);
         // Set the title.
-        a.title = address; 
+        a.title = address;
         // Set the href property.
-        a.href = address; 
+        a.href = address;
         // open in new window plz
         a.target = "_blank"
-          
+
         // Append the anchor element to the body.
-        getP().appendChild(a); 
-        br()
+        getP().appendChild(a);
+        addText("")
     }
 
     function br() {
@@ -146,6 +161,7 @@
     }
 
     function initialize() {
+
         const urlSearchParams = new URLSearchParams(window.location.search);
         const params = Object.fromEntries(urlSearchParams.entries());
 
