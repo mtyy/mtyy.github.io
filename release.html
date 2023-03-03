@@ -49,6 +49,14 @@
             With libs:
             <input id="libs" onkeyup="generateLinks()">
         </div>
+        <div>
+            Previous version :
+            <input id="pmail" onkeyup="generateLinks()">
+            With cloud:
+            <input id="pcloud" onkeyup="generateLinks()">
+            With libs:
+            <input id="plibs" onkeyup="generateLinks()">
+        </div>
     </div>
     </p>
     <p id="results"></p>
@@ -65,40 +73,70 @@
         // clear this bad boy
         getP().innerHTML = ""
 
-        const mail = document.getElementById("mail").value;
-        const cloud = document.getElementById("cloud").value;
-        const libs = document.getElementById("libs").value;
+        const mailString = document.getElementById("mail").value;
+        const cloudString = document.getElementById("cloud").value;
+        const libsString = document.getElementById("libs").value;
 
-        const mailMajor = parseInt(mail.split('.')[0])
-        const mailMinor = parseInt(mail.split('.')[1])
-        const currentMail = `${mailMajor}.${mailMinor}`
-        const previousMail = `${mailMajor}.${mailMinor - 1}`
+        var mail = getCurrPrev(mailString)
+        var cloud = getCurrPrev(cloudString)
+        var libs = getCurrPrev(libsString)
 
-        const cloudMajor = parseInt(cloud.split('.')[0])
-        const cloudMinor = parseInt(cloud.split('.')[1])
-        const currentCloud = `${cloudMajor}.${cloudMinor}`
-        const previousCloud = `${cloudMajor}.${cloudMinor - 1}`
-
-        const libsMajor = parseInt(libs.split('.')[0])
-        const libsMinor = parseInt(libs.split('.')[1])
-        const currentLibs = `${libsMajor}.${libsMinor}`
-        const previousLibs = `${libsMajor}.${libsMinor - 1}`
+        mail = getPrevIfSet('pmail', mail)
+        cloud = getPrevIfSet('pcloud', cloud)
+        libs = getPrevIfSet('plibs', libs)
 
 
 
-        buildRepo("Mail", "https://git.mam.dev/android/k9ui/", "development", `release/release_${currentMail}`, `release/release_${previousMail}`)
-        buildRepo("Cloud", "https://git.mam.dev/android/andonlinestorage/", "development", `release/release_${currentCloud}`, `release/release_${previousCloud}`)
-        buildRepo("Libs", "https://git.mam.dev/android/libs/", "development", `release/release_${currentLibs}`, `release/release_${previousLibs}`)
+        buildRepo("Mail", "https://git.mam.dev/android/k9ui/", "development", `release/release_${mail.cur}`, `release/release_${mail.prev}`)
+        buildRepo("Cloud", "https://git.mam.dev/android/andonlinestorage/", "development", `release/release_${cloud.cur}`, `release/release_${cloud.prev}`)
+        buildRepo("Libs", "https://git.mam.dev/android/libs/", "development", `release/release_${libs.cur}`, `release/release_${libs.prev}`)
 
 
         addText("Diffs:")
         br()
-        addLink(`https://git.mam.dev/android/k9ui/-/compare/release%2Frelease_${previousMail}...release%2Frelease_${currentMail}?from_project_id=303&straight=false`)
-        addLink(`https://git.mam.dev/android/andonlinestorage/-/compare/release%2Frelease_${previousCloud}...release%2Frelease_${currentCloud}?from_project_id=292&straight=false`)
-        addLink(`https://git.mam.dev/android/libs/-/compare/release%2Frelease_${previousLibs}...release%2Frelease_${currentLibs}?from_project_id=4146&straight=false`)
+        addLink(`https://git.mam.dev/android/k9ui/-/compare/release%2Frelease_${mail.prev}...release%2Frelease_${mail.cur}?from_project_id=303&straight=false`)
+        addLink(`https://git.mam.dev/android/andonlinestorage/-/compare/release%2Frelease_${cloud.prev}...release%2Frelease_${cloud.cur}?from_project_id=292&straight=false`)
+        addLink(`https://git.mam.dev/android/libs/-/compare/release%2Frelease_${libs.prev}...release%2Frelease_${libs.cur}?from_project_id=4146&straight=false`)
+
+        br()
+        br()
+
+        const fields = ['mail', 'pmail', 'cloud', 'pcloud', 'libs', 'plibs']
+        const filledFields = fields.filter(id => document.getElementById(id).value != "")
+        const queryparams = filledFields.map(id => `${id}=${document.getElementById(id).value}`).join(`&`)
+        const query = filledFields.length > 0 ? `?${queryparams}` : ``
+
+        addLink(`https://maikalo.com/release${query}`)
+    }
 
 
+    function getPrevIfSet(prevId, versions) {
+        const pmail = document.getElementById(prevId)
+        if (pmail.value == "" && !isNaN(versions.prev)) {
+            pmail.placeholder = versions.prev
+        } else {
+            versions.prev = pmail.value
+        }
+        return versions
+    }
 
+    function getCurrPrev(version) {
+        const mailMajor = parseInt(version.split('.')[0])
+        const mailMinor = parseInt(version.split('.')[1])
+        const currentMail = `${mailMajor}.${mailMinor}`
+        const previousMail = `${mailMajor}.${mailMinor - 1}`
+
+        return {
+            'cur': currentMail,
+            'prev': previousMail
+        }
+    }
+
+    function getVer(version) {
+        const mailMajor = parseInt(version.split('.')[0])
+        const mailMinor = parseInt(version.split('.')[1])
+        const currentMail = `${mailMajor}.${mailMinor}`
+        return currentMail
     }
 
     function addText(text) {
@@ -131,7 +169,6 @@
 
         br()
         br()
-
     }
 
 
@@ -168,6 +205,9 @@
         setField("mail", params.mail)
         setField("cloud", params.cloud)
         setField("libs", params.libs)
+        setField("pmail", params.pmail)
+        setField("pcloud", params.pcloud)
+        setField("plibs", params.lpibs)
 
         generateLinks()
     }
