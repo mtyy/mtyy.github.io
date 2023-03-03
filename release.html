@@ -106,7 +106,7 @@
         const queryparams = filledFields.map(id => `${id}=${document.getElementById(id).value}`).join(`&`)
         const query = filledFields.length > 0 ? `?${queryparams}` : ``
 
-        addLink(`https://maikalo.com/release${query}`)
+        addLink(`https://www.maikalo.com/release${query}`, `https://www.maikalo.com/release${query}`)
     }
 
 
