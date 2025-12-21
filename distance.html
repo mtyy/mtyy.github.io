@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run Distance Calculator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 300px;
+        }
+        h2 { margin-top: 0; color: #333; text-align: center; }
+        label { display: block; margin-top: 1rem; color: #666; font-size: 0.9rem; }
+        
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            font-size: 1.1rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box; /* Keeps padding inside width */
+        }
+        
+        .helper-text {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 2px;
+            min-height: 1.2em; /* Prevents jumping */
+        }
+
+        .result-box {
+            background-color: #e3f2fd;
+            color: #1565c0;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+        .result-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .result-label { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Run Calculator</h2>
+
+    <label for="paceInput">Pace (min/km)</label>
+    <input type="number" id="paceInput" placeholder="e.g. 620 for 6:20" oninput="calculate()">
+    <div class="helper-text" id="paceDisplay">Enter 620 for 6:20</div>
+
+    <label for="timeInput">Total Time (minutes)</label>
+    <input type="number" id="timeInput" placeholder="e.g. 43" value="43" oninput="calculate()">
+
+    <div class="result-box">
+        <div class="result-label">Distance</div>
+        <div class="result-value" id="result">0.00 km</div>
+    </div>
+</div>
+
+<script>
+    function calculate() {
+        const paceRaw = document.getElementById('paceInput').value;
+        const timeRaw = document.getElementById('timeInput').value;
+        const resultEl = document.getElementById('result');
+        const paceDisplayEl = document.getElementById('paceDisplay');
+
+        // 1. Parse Pace
+        let minutes = 0;
+        let seconds = 0;
+
+        if (paceRaw.length > 0) {
+            if (paceRaw.length <= 2) {
+                // If 1 or 2 digits, treat entirely as seconds (e.g., "62" -> 62s)
+                seconds = parseInt(paceRaw);
+            } else {
+                // Split last 2 digits for seconds, rest for minutes
+                seconds = parseInt(paceRaw.slice(-2));
+                minutes = parseInt(paceRaw.slice(0, -2));
+            }
+        }
+
+        // Update helper text to show interpretation
+        // Pad seconds with leading zero for display
+        const displaySeconds = seconds < 10 ? '0' + seconds : seconds;
+        paceDisplayEl.innerText = `Interpreted as: ${minutes}:${displaySeconds} min/km`;
+
+        // 2. Convert Pace to decimal minutes
+        // (minutes + seconds/60)
+        const paceInDecimal = minutes + (seconds / 60);
+
+        // 3. Calculate Distance
+        // Distance = Time / Pace
+        const timeInMinutes = parseFloat(timeRaw);
+
+        if (paceInDecimal > 0 && timeInMinutes > 0) {
+            const distance = timeInMinutes / paceInDecimal;
+            resultEl.innerText = distance.toFixed(2) + " km";
+        } else {
+            resultEl.innerText = "0.00 km";
+        }
+    }
+    
+    // Run once on load to catch default values
+    calculate();
+</script>
+
+</body>
+</html>
