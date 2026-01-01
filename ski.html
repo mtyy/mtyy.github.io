@@ -7,8 +7,19 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; padding: 20px; color: #1c1e21; }
         .container { max-width: 800px; margin: 0 auto; }
-        h1 { text-align: center; color: #1877f2; margin-bottom: 30px; }
+        h1 { text-align: center; color: #1877f2; margin-bottom: 20px; }
         
+        /* Sorting Controls */
+        .controls { text-align: center; margin-bottom: 25px; }
+        .sort-label { font-size: 0.9em; color: #666; margin-right: 10px; }
+        .sort-btn {
+            background: white; border: 1px solid #ddd; padding: 8px 16px; 
+            border-radius: 20px; cursor: pointer; font-size: 0.9em; font-weight: 600;
+            color: #555; transition: all 0.2s; margin: 0 4px;
+        }
+        .sort-btn:hover { background: #f5f5f5; border-color: #ccc; }
+        .sort-btn.active { background: #e3f2fd; color: #1877f2; border-color: #1877f2; }
+
         .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.2s; }
         .card:hover { transform: translateY(-2px); }
         
@@ -109,6 +120,13 @@
 
 <div class="container">
     <h1>⛷️ Suusarajad Live</h1>
+    
+    <div class="controls">
+        <span class="sort-label">Järjesta:</span>
+        <button id="sort-date" class="sort-btn active" onclick="sortAndRender('date')">🕒 Viimane info</button>
+        <button id="sort-status" class="sort-btn" onclick="sortAndRender('status')">🚦 Raja tase</button>
+    </div>
+
     <div id="track-list" class="loading">
         Laen andmeid Terviserajad.ee lehelt...
     </div>
@@ -132,6 +150,8 @@
         'https://terviserajad.ee/rajad/saku-terviserada/',
         'https://terviserajad.ee/rajad/juri-terviserajad/'
     ];
+
+    let allTracksData = []; // Store fetched data here
 
     // --- 2. HELPERS ---
     
@@ -178,6 +198,20 @@
         }
 
         return 0;
+    };
+
+    // Calculate status rank based on icon filename
+    // 1 = purple (Best), 2 = blue, 3 = lightblue, 4 = green
+    const getStatusRank = (iconUrl) => {
+        if (!iconUrl) return 99; // No icon = lowest priority
+        const lower = iconUrl.toLowerCase();
+        
+        if (lower.includes('purple')) return 1;
+        if (lower.includes('blue') && !lower.includes('lightblue')) return 2;
+        if (lower.includes('lightblue')) return 3;
+        if (lower.includes('green')) return 4;
+        
+        return 5; // Unknown color
     };
 
     // --- 3. MODAL LOGIC ---
@@ -230,6 +264,9 @@
                 const src = iconImg.getAttribute('src');
                 if (src) statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
             }
+            
+            // Calculate Rank immediately
+            const statusRank = getStatusRank(statusIconUrl);
 
             // C. Status Info Block
             let status = "Info puudub";
@@ -248,7 +285,7 @@
             if (status === "Info puudub") {
                 const label = doc.evaluate("//*[contains(text(), 'Raja olek')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
                 if (label && label.parentElement && label.parentElement.parentElement) {
-                     status = label.parentElement.parentElement.innerHTML;
+                      status = label.parentElement.parentElement.innerHTML;
                 }
             }
 
@@ -276,28 +313,15 @@
             let wind = null;
 
             // Strategy: Find the "Ilm" header, then look at its parent's siblings.
-            // 1. Find the specific div that contains the label "Ilm"
             const ilmLabel = Array.from(doc.querySelectorAll('.font-semibold')).find(el => el.textContent.trim() === 'Ilm');
             
             if (ilmLabel && ilmLabel.parentElement) {
-                // 2. The parent is the wrapper <div class="mt-1">
                 const weatherContainer = ilmLabel.parentElement;
-                
-                // 3. Find the data rows (siblings with class .text-sm)
                 const dataRows = weatherContainer.querySelectorAll('.text-sm');
-                
-                // The first .text-sm is usually Temperature
-                if (dataRows.length > 0) {
-                    weather = dataRows[0].textContent.trim();
-                }
-                
-                // The second .text-sm is usually Wind (or "Info puudub")
-                if (dataRows.length > 1) {
-                    wind = dataRows[1].textContent.trim();
-                }
+                if (dataRows.length > 0) weather = dataRows[0].textContent.trim();
+                if (dataRows.length > 1) wind = dataRows[1].textContent.trim();
             }
 
-            // FALLBACK: If DOM traversal fails (layout changed), use the old Regex method
             if (weather === "Temperatuur puudub") {
                 const bodyText = doc.body.textContent || ""; 
                 const weatherMatch = bodyText.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
@@ -329,26 +353,26 @@
                 lastComment.timestamp = parseEstonianDate(lastComment.date);
             }
 
-            return { url, name, status, statusIconUrl, weather, wind, webcamLinkUrl, videoUrl, lastComment };
+            return { url, name, status, statusIconUrl, statusRank, weather, wind, webcamLinkUrl, videoUrl, lastComment };
 
         } catch (e) {
             console.error("Error fetching", url, e);
-            return { error: true, url, name: url, status: "Viga andmete laadimisel", lastComment: { timestamp: 0 } };
+            return { error: true, url, name: url, status: "Viga andmete laadimisel", statusRank: 99, lastComment: { timestamp: 0 } };
         }
     }
 
-    async function init() {
+    // --- 5. SORTING & RENDERING ---
+
+    function renderTracks(tracks) {
         const container = document.getElementById('track-list');
-        const promises = trackUrls.map(url => fetchTrackData(url));
-        const results = await Promise.all(promises);
-        const validTracks = results.filter(r => !r.error);
-        
-        validTracks.sort((a, b) => b.lastComment.timestamp - a.lastComment.timestamp);
-
         container.innerHTML = '';
-        if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
+        
+        if (!tracks || tracks.length === 0) {
+            container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
+            return;
+        }
 
-        validTracks.forEach(t => {
+        tracks.forEach(t => {
             let camButton = '';
             
             if (t.videoUrl) {
@@ -361,7 +385,7 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="title-group">
-                            ${t.statusIconUrl ? `<img src="${t.statusIconUrl}" class="status-icon" alt="Status" title="Raja staatus">` : ''}
+                            ${t.statusIconUrl ? `<img src="${t.statusIconUrl}" class="status-icon" alt="Status" title="Rank: ${t.statusRank}">` : ''}
                             <h2><a href="${t.url}" target="_blank">${t.name}</a></h2>
                         </div>
                         <div class="meta-badges">
@@ -386,6 +410,44 @@
             `;
             container.innerHTML += html;
         });
+    }
+
+    function sortAndRender(mode) {
+        if (!allTracksData || allTracksData.length === 0) return;
+
+        // Toggle Buttons
+        document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`sort-${mode}`).classList.add('active');
+
+        // Create a copy to sort
+        const sorted = [...allTracksData].sort((a, b) => {
+            if (mode === 'date') {
+                // A) Date Sort (Newest first)
+                // If timestamps are equal, fallback to Status Rank (Best first)
+                const dateDiff = b.lastComment.timestamp - a.lastComment.timestamp;
+                if (dateDiff !== 0) return dateDiff;
+                return a.statusRank - b.statusRank; 
+            } else {
+                // B) Status Sort (Best rank/lowest number first)
+                // If rank is equal, fallback to Date (Newest first)
+                const statusDiff = a.statusRank - b.statusRank;
+                if (statusDiff !== 0) return statusDiff;
+                return b.lastComment.timestamp - a.lastComment.timestamp;
+            }
+        });
+
+        renderTracks(sorted);
+    }
+
+    async function init() {
+        const container = document.getElementById('track-list');
+        const promises = trackUrls.map(url => fetchTrackData(url));
+        const results = await Promise.all(promises);
+        
+        allTracksData = results.filter(r => !r.error);
+        
+        // Default sort: Date
+        sortAndRender('date');
     }
 
     init();
