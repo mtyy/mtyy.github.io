@@ -13,13 +13,18 @@
         .card:hover { transform: translateY(-2px); }
         
         .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        
+        .title-group { display: flex; align-items: center; gap: 10px; }
+        .status-icon { width: 24px; height: 24px; object-fit: contain; }
+        
         .card h2 { margin: 0; font-size: 1.4em; }
         .card h2 a { color: #050505; text-decoration: none; }
         .card h2 a:hover { text-decoration: underline; color: #1877f2; }
         
-        .meta-badges { display: flex; gap: 10px; flex-wrap: wrap; }
+        .meta-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;}
         .badge { padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; }
         .badge-weather { background: #e3f2fd; color: #0d47a1; }
+        .badge-wind { background: #e0f7fa; color: #006064; }
         .badge-cam { background: #ffebee; color: #c62828; text-decoration: none; }
         
         .status-section { background: #f0f9ff; border-left: 5px solid #2196f3; padding: 12px; margin: 15px 0; border-radius: 4px; }
@@ -28,7 +33,7 @@
 
         .comment-section { margin-top: 15px; background: #f9f9f9; padding: 15px; border-radius: 8px; position: relative; }
         .comment-section::before { content: "💬"; position: absolute; top: -10px; left: 10px; font-size: 20px; background: white; padding: 0 5px; border-radius: 50%; }
-        .comment-text { font-style: italic; color: #444; line-height: 1.5; }
+        .comment-text { font-style: italic; color: #444; line-height: 1.5; white-space: pre-line; }
         .comment-meta { margin-top: 10px; font-size: 0.85em; color: #888; text-align: right; border-top: 1px solid #eee; padding-top: 8px; }
         
         .loading { text-align: center; color: #666; font-style: italic; margin-top: 50px; }
@@ -55,7 +60,6 @@
 
     // --- 2. HELPERS ---
     
-    // Convert Estonian dates to JS Timestamp
     const parseEstonianDate = (dateStr) => {
         if (!dateStr) return 0;
         const months = {
@@ -64,14 +68,11 @@
             'september': '09', 'oktoober': '10', 'november': '11', 'detsember': '12'
         };
         let clean = dateStr.toLowerCase();
-        // Replace month names
         Object.keys(months).forEach(m => {
             if (clean.includes(m)) clean = clean.replace(m, months[m]);
         });
-        // Attempt to extract YYYY-MM-DD parts
         const parts = clean.match(/(\d{1,2})[\s\.]+(\d{1,2})[,\s]+(\d{4})/);
         if (parts) {
-            // parts[3]=Year, parts[2]=Month, parts[1]=Day
             return new Date(`${parts[3]}-${parts[2]}-${parts[1]}`).getTime();
         }
         return 0;
@@ -81,100 +82,100 @@
 
     async function fetchTrackData(url) {
         try {
-            // !!! UPDATE THIS LINE if your worker URL changes !!!
+            // Your Cloudflare Worker
             const myWorker = 'https://yellow-lake-18bc.mty-metal.workers.dev/'; 
-            
             const proxyUrl = `${myWorker}?url=${encodeURIComponent(url)}`;
             
             const response = await fetch(proxyUrl);
             if (!response.ok) throw new Error(`Status: ${response.status}`);
             
             const htmlText = await response.text();
-            
-            if (!htmlText || htmlText.length < 100) throw new Error("Empty or invalid content");
+            if (!htmlText || htmlText.length < 100) throw new Error("Empty content");
 
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlText, "text/html");
 
-            // --- Parsing Logic ---
-
-            // A. Name
+            // --- A. Name ---
             const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
 
-            // B. Status ("Raja olek") - IMPROVED SELECTOR
-            let status = "Info puudub";
-            
-            // Strategy 1: Look for exact text match in common elements
-            const elements = doc.querySelectorAll('p, div, span, li');
-            for (let el of elements) {
-                if (el.innerText && el.innerText.includes('Raja olek:')) {
-                    // Get the text, remove the label
-                    let text = el.innerText.replace('Raja olek:', '').trim();
-                    // Sometimes the status is on the next line or has extra whitespace
-                    if (text.length > 2) { 
-                        status = text.split('\n')[0]; // Take first valid line
-                        break; 
-                    }
+            // --- B. Status Icon (NEW) ---
+            let statusIconUrl = null;
+            const iconImg = doc.querySelector('img[alt="Staatuse ikoon"]');
+            if (iconImg) {
+                const src = iconImg.getAttribute('src');
+                if (src) {
+                    // Handle relative URLs just in case
+                    statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
                 }
             }
-            
-            // Strategy 2: If simple replace didn't work (empty string), try next sibling
-            if (status === "Info puudub" || status === "") {
-                 const label = Array.from(doc.querySelectorAll('*')).find(el => el.innerText === 'Raja olek:');
-                 if (label && label.nextSibling) {
-                     status = label.nextSibling.textContent.trim();
-                 }
+
+            // --- C. Status Text ("Raja olek") ---
+            let status = "Info puudub";
+            const xpath = "//*[contains(text(), 'Raja olek')]";
+            const matchingElement = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+
+            if (matchingElement) {
+                let fullText = matchingElement.textContent.trim();
+                if (fullText.length < 15) {
+                    fullText = matchingElement.parentElement ? matchingElement.parentElement.textContent.trim() : fullText;
+                }
+                status = fullText.replace(/Raja olek:?/i, '').trim();
+                if (!status && matchingElement.nextElementSibling) {
+                    status = matchingElement.nextElementSibling.textContent.trim();
+                }
             }
 
-            // C. Webcam
+            // --- D. Webcam ---
             let webcamUrl = null;
             const links = doc.querySelectorAll('a');
             links.forEach(a => {
                 if (a.innerText.toLowerCase().includes('otsepilt')) webcamUrl = a.href;
             });
 
-            // D. Weather
+            // --- E. Weather & Wind ---
             let weather = "Temperatuur puudub";
-            const textContent = doc.body.innerText;
-            const weatherMatch = textContent.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
+            let wind = null;
+            const bodyText = doc.body.textContent || ""; 
+            
+            const weatherMatch = bodyText.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
             if (weatherMatch) weather = weatherMatch[0];
 
-            // E. Last Comment - IMPROVED SELECTOR
+            const windMatch = bodyText.match(/(\d+(?:[.,]\d+)?\s?m\/s)/);
+            if (windMatch) wind = windMatch[0];
+
+            // --- F. Last Comment ---
             let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
-            
-            // Terviserajad often uses standard WordPress comment structure
-            // Try specific classes first
-            const commentBlock = doc.querySelector('.comment-body') || 
-                                 doc.querySelector('.comment-content') || 
-                                 doc.querySelector('.comment');
-            
-            if (commentBlock) {
-                // Remove clutter (reply buttons, etc)
-                const junk = commentBlock.querySelectorAll('.reply, button, .btn, .comment-reply-link');
-                junk.forEach(b => b.remove());
+            const commentList = doc.querySelector('.comment-list, .comments-area, ol.comments');
+            let firstComment = null;
 
-                // Get text
-                lastComment.text = commentBlock.innerText.trim();
-                // If text is huge, take first paragraph
-                const p = commentBlock.querySelector('p');
-                if (p) lastComment.text = p.innerText.trim();
+            if (commentList) {
+                firstComment = commentList.querySelector('li, .comment-body, article');
+            } else {
+                firstComment = doc.querySelector('.comment-body');
+            }
 
-                // Get Meta (Author/Date)
-                const meta = commentBlock.querySelector('.comment-meta') || 
-                             commentBlock.querySelector('.comment-metadata') ||
-                             commentBlock.querySelector('footer');
-                
+            if (firstComment) {
+                const junk = firstComment.querySelectorAll('.reply, .comment-reply-link, button');
+                junk.forEach(j => j.remove());
+
+                lastComment.text = firstComment.innerText.trim();
+
+                const meta = firstComment.querySelector('.comment-metadata, .comment-meta, time');
                 if (meta) {
-                    lastComment.date = meta.innerText.replace(/\s+/g, ' ').trim();
-                } else {
-                    // Fallback: look for date pattern in the block text
-                    const dateMatch = commentBlock.innerText.match(/\w+\s\d{1,2},\s\d{4}/);
-                    if (dateMatch) lastComment.date = dateMatch[0];
+                    lastComment.date = meta.innerText.trim();
                 }
+
+                if (!lastComment.date) {
+                    const dateMatch = firstComment.innerText.match(/([a-zA-Zäõüö]+\s+\d{1,2},?\s+\d{4})/i);
+                    if (dateMatch) {
+                        lastComment.date = dateMatch[0];
+                    }
+                }
+                
                 lastComment.timestamp = parseEstonianDate(lastComment.date);
             }
 
-            return { url, name, status, weather, webcamUrl, lastComment };
+            return { url, name, status, statusIconUrl, weather, wind, webcamUrl, lastComment };
 
         } catch (e) {
             console.error("Error fetching", url, e);
@@ -185,17 +186,12 @@
     async function init() {
         const container = document.getElementById('track-list');
         
-        // Fetch all in parallel
         const promises = trackUrls.map(url => fetchTrackData(url));
         const results = await Promise.all(promises);
-
-        // Filter out errors and Sort
         const validTracks = results.filter(r => !r.error);
         
-        // Sort: Newest comment first
         validTracks.sort((a, b) => b.lastComment.timestamp - a.lastComment.timestamp);
 
-        // Render
         container.innerHTML = '';
         if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
 
@@ -203,9 +199,13 @@
             const html = `
                 <div class="card">
                     <div class="card-header">
-                        <h2><a href="${t.url}" target="_blank">${t.name}</a></h2>
+                        <div class="title-group">
+                            ${t.statusIconUrl ? `<img src="${t.statusIconUrl}" class="status-icon" alt="Status" title="Raja staatus">` : ''}
+                            <h2><a href="${t.url}" target="_blank">${t.name}</a></h2>
+                        </div>
                         <div class="meta-badges">
-                            <span class="badge badge-weather">${t.weather}</span>
+                            <span class="badge badge-weather">🌡️ ${t.weather}</span>
+                            ${t.wind ? `<span class="badge badge-wind">💨 ${t.wind}</span>` : ''}
                             ${t.webcamUrl ? `<a href="${t.webcamUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>` : ''}
                         </div>
                     </div>
@@ -216,7 +216,7 @@
                     </div>
 
                     <div class="comment-section">
-                        <div class="comment-text">"${t.lastComment.text.substring(0, 300)}${t.lastComment.text.length > 300 ? '...' : ''}"</div>
+                        <div class="comment-text">"${t.lastComment.text}"</div>
                         <div class="comment-meta">
                             — ${t.lastComment.date || 'Kuupäev puudub'} <br>
                             <a href="${t.url}" target="_blank">Vaata originaali</a>
