@@ -81,15 +81,15 @@
 
 async function fetchTrackData(url) {
         try {
-            // SWITCHED TO CORSPROXY.IO
-            // Note: This proxy returns the RAW HTML string, not a JSON object.
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            
+            const myWorker = 'https://yellow-lake-18bc.mty-metal.workers.dev/'; 
+            
+            const proxyUrl = `${myWorker}?url=${encodeURIComponent(url)}`;
             
             const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+            if (!response.ok) throw new Error(`Status: ${response.status}`);
             
-            // Get raw text directly
-            const htmlText = await response.text(); 
+            const htmlText = await response.text();
             
             if (!htmlText || htmlText.length < 100) throw new Error("Empty or invalid content");
 
