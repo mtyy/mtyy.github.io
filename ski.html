@@ -268,14 +268,43 @@
                 });
             }
 
-            // E. Weather & Wind
+            // E. Weather & Wind (UPDATED DOM STRATEGY)
             let weather = "Temperatuur puudub";
             let wind = null;
-            const bodyText = doc.body.textContent || ""; 
-            const weatherMatch = bodyText.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
-            if (weatherMatch) weather = weatherMatch[0];
-            const windMatch = bodyText.match(/(\d+(?:[.,]\d+)?\s?m\/s)/);
-            if (windMatch) wind = windMatch[0];
+
+            // Strategy: Find the "Ilm" header, then look at its parent's siblings.
+            // 1. Find the specific div that contains the label "Ilm"
+            const ilmLabel = Array.from(doc.querySelectorAll('.font-semibold')).find(el => el.textContent.trim() === 'Ilm');
+            
+            if (ilmLabel && ilmLabel.parentElement) {
+                // 2. The parent is the wrapper <div class="mt-1">
+                const weatherContainer = ilmLabel.parentElement;
+                
+                // 3. Find the data rows (siblings with class .text-sm)
+                const dataRows = weatherContainer.querySelectorAll('.text-sm');
+                
+                // The first .text-sm is usually Temperature
+                if (dataRows.length > 0) {
+                    weather = dataRows[0].textContent.trim();
+                }
+                
+                // The second .text-sm is usually Wind (or "Info puudub")
+                if (dataRows.length > 1) {
+                    wind = dataRows[1].textContent.trim();
+                }
+            }
+
+            // FALLBACK: If DOM traversal fails (layout changed), use the old Regex method
+            if (weather === "Temperatuur puudub") {
+                const bodyText = doc.body.textContent || ""; 
+                const weatherMatch = bodyText.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
+                if (weatherMatch) weather = weatherMatch[0];
+                
+                if (!wind) {
+                    const windMatch = bodyText.match(/(\d+(?:[.,]\d+)?\s?m\/s)/);
+                    if (windMatch) wind = windMatch[0];
+                }
+            }
 
             // F. Last Comment
             let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
@@ -320,7 +349,7 @@
             let camButton = '';
             
             if (t.videoUrl) {
-                camButton = `<button class="badge btn-live" onclick="openVideo('${t.videoUrl}')"><span class="pulse-dot"></span> 🎥 Vaata otsepilti</button>`;
+                camButton = `<button class="badge btn-live" onclick="openVideo('${t.videoUrl}')">📷 live</button>`;
             } else if (t.webcamLinkUrl) {
                 camButton = `<a href="${t.webcamLinkUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>`;
             }
