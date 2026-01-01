@@ -22,10 +22,19 @@
         .card h2 a:hover { text-decoration: underline; color: #1877f2; }
         
         .meta-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;}
-        .badge { padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; }
+        .badge { padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; display: flex; align-items: center; gap: 4px; }
         .badge-weather { background: #e3f2fd; color: #0d47a1; }
         .badge-wind { background: #e0f7fa; color: #006064; }
-        .badge-cam { background: #ffebee; color: #c62828; text-decoration: none; }
+        
+        /* Live Video Button Style */
+        .btn-live { 
+            background: #ffebee; color: #c62828; 
+            border: 1px solid #ffcdd2;
+            cursor: pointer; text-decoration: none; 
+            transition: all 0.2s;
+        }
+        .btn-live:hover { background: #ffcdd2; }
+        .pulse-dot { width: 8px; height: 8px; background: red; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
         
         .status-section { background: #f0f9ff; border-left: 5px solid #2196f3; padding: 12px; margin: 15px 0; border-radius: 4px; }
         .status-label { font-weight: bold; display: block; margin-bottom: 4px; color: #555; font-size: 0.8em; text-transform: uppercase; }
@@ -38,6 +47,25 @@
         
         .loading { text-align: center; color: #666; font-style: italic; margin-top: 50px; }
         .error { color: red; font-weight: bold; text-align: center; }
+
+        /* MODAL STYLES */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: black; padding: 0; border-radius: 8px;
+            width: 90%; max-width: 800px; aspect-ratio: 16/9;
+            position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .modal-close {
+            position: absolute; top: -40px; right: 0; color: white; font-size: 30px; 
+            cursor: pointer; background: none; border: none;
+        }
+        .modal-iframe { width: 100%; height: 100%; border: none; border-radius: 8px; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -46,6 +74,13 @@
     <h1>⛷️ Suusarajad Live</h1>
     <div id="track-list" class="loading">
         Laen andmeid Terviserajad.ee lehelt...
+    </div>
+</div>
+
+<div id="video-modal" class="modal-overlay" onclick="closeVideo()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeVideo()">&times;</button>
+        <iframe id="video-frame" class="modal-iframe" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
     </div>
 </div>
 
@@ -64,11 +99,8 @@
         if (!dateStr) return 0;
         let clean = dateStr.toLowerCase().trim();
 
-        // 1. Handle "Today/Yesterday" relative dates
         const now = new Date();
-        if (clean.includes('täna') || clean.includes('today')) {
-            return now.getTime();
-        }
+        if (clean.includes('täna') || clean.includes('today')) return now.getTime();
         if (clean.includes('eile') || clean.includes('yesterday')) {
             const yesterday = new Date(now);
             yesterday.setDate(yesterday.getDate() - 1);
@@ -90,48 +122,55 @@
             'detsember': '12', 'december': '12', 'dec': '12'
         };
 
-        // 2. Scenario A: "detsember 30, 2025" (MonthName Day, Year)
-        // This is likely what was failing before
         const monthFirstMatch = clean.match(/([a-zA-Zäõüö]+)\s+(\d{1,2})[,\s]+(\d{4})/);
-        if (monthFirstMatch) {
-            const mName = monthFirstMatch[1];
-            const day = monthFirstMatch[2].padStart(2, '0');
-            const year = monthFirstMatch[3];
-            
-            if (months[mName]) {
-                return new Date(`${year}-${months[mName]}-${day}`).getTime();
-            }
+        if (monthFirstMatch && months[monthFirstMatch[1]]) {
+            return new Date(`${monthFirstMatch[3]}-${months[monthFirstMatch[1]]}-${monthFirstMatch[2].padStart(2,'0')}`).getTime();
         }
 
-        // 3. Scenario B: "30. detsember 2025" (Day. MonthName Year)
         const dayFirstMatch = clean.match(/(\d{1,2})[\.\s]+([a-zA-Zäõüö]+)[,\s]+(\d{4})/);
-        if (dayFirstMatch) {
-            const day = dayFirstMatch[1].padStart(2, '0');
-            const mName = dayFirstMatch[2];
-            const year = dayFirstMatch[3];
-
-            if (months[mName]) {
-                return new Date(`${year}-${months[mName]}-${day}`).getTime();
-            }
+        if (dayFirstMatch && months[dayFirstMatch[2]]) {
+            return new Date(`${dayFirstMatch[3]}-${months[dayFirstMatch[2]]}-${dayFirstMatch[1].padStart(2,'0')}`).getTime();
         }
 
-        // 4. Scenario C: "30.12.2025" (Numeric)
         const numericMatch = clean.match(/(\d{1,2})[\.\-](\d{1,2})[\.\-](\d{4})/);
         if (numericMatch) {
-            const day = numericMatch[1].padStart(2, '0');
-            const month = numericMatch[2].padStart(2, '0');
-            const year = numericMatch[3];
-            return new Date(`${year}-${month}-${day}`).getTime();
+            return new Date(`${numericMatch[3]}-${numericMatch[2].padStart(2,'0')}-${numericMatch[1].padStart(2,'0')}`).getTime();
         }
 
         return 0;
     };
 
-    // --- 3. MAIN LOGIC ---
+    // --- 3. MODAL LOGIC ---
+    function openVideo(url) {
+        if (!url) return;
+        const modal = document.getElementById('video-modal');
+        const iframe = document.getElementById('video-frame');
+        
+        // Ensure standard YouTube/Vimeo URLs allow embedding
+        // (Sometimes src comes in without https: or needs autoplay tweaks)
+        let cleanUrl = url;
+        if (cleanUrl.startsWith('//')) cleanUrl = 'https:' + cleanUrl;
+        
+        // Auto-play tweak for youtube
+        if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
+            cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+        }
+
+        iframe.src = cleanUrl;
+        modal.style.display = 'flex';
+    }
+
+    function closeVideo() {
+        const modal = document.getElementById('video-modal');
+        const iframe = document.getElementById('video-frame');
+        modal.style.display = 'none';
+        iframe.src = ''; // Stop video playback
+    }
+
+    // --- 4. MAIN FETCH LOGIC ---
 
     async function fetchTrackData(url) {
         try {
-            // Your Cloudflare Worker
             const myWorker = 'https://yellow-lake-18bc.mty-metal.workers.dev/'; 
             const proxyUrl = `${myWorker}?url=${encodeURIComponent(url)}`;
             
@@ -144,86 +183,80 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlText, "text/html");
 
-            // --- A. Name ---
+            // A. Name
             const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
 
-            // --- B. Status Icon ---
+            // B. Status Icon
             let statusIconUrl = null;
             const iconImg = doc.querySelector('img[alt="Staatuse ikoon"]');
             if (iconImg) {
                 const src = iconImg.getAttribute('src');
-                if (src) {
-                    statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
-                }
+                if (src) statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
             }
 
-            // --- C. Status Text ---
+            // C. Status Text
             let status = "Info puudub";
             const xpath = "//*[contains(text(), 'Raja olek')]";
             const matchingElement = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-
             if (matchingElement) {
                 let fullText = matchingElement.textContent.trim();
-                if (fullText.length < 15) {
-                    fullText = matchingElement.parentElement ? matchingElement.parentElement.textContent.trim() : fullText;
-                }
+                if (fullText.length < 15) fullText = matchingElement.parentElement ? matchingElement.parentElement.textContent.trim() : fullText;
                 status = fullText.replace(/Raja olek:?/i, '').trim();
-                if (!status && matchingElement.nextElementSibling) {
-                    status = matchingElement.nextElementSibling.textContent.trim();
+                if (!status && matchingElement.nextElementSibling) status = matchingElement.nextElementSibling.textContent.trim();
+            }
+
+            // D. Webcam / Live Video Detection
+            // 1. Look for the modal that the button triggers (modal--live-feed)
+            let videoUrl = null;
+            const modalDiv = doc.getElementById('modal--live-feed');
+            
+            if (modalDiv) {
+                const iframe = modalDiv.querySelector('iframe');
+                if (iframe) {
+                    // Check src or data-src (lazy loading)
+                    videoUrl = iframe.getAttribute('src') || iframe.getAttribute('data-src');
                 }
             }
 
-            // --- D. Webcam ---
-            let webcamUrl = null;
-            const links = doc.querySelectorAll('a');
-            links.forEach(a => {
-                if (a.innerText.toLowerCase().includes('otsepilt')) webcamUrl = a.href;
-            });
+            // Fallback: If no modal logic, look for simple links
+            let webcamLinkUrl = null;
+            if (!videoUrl) {
+                const links = doc.querySelectorAll('a');
+                links.forEach(a => {
+                    if (a.innerText.toLowerCase().includes('otsepilt')) webcamLinkUrl = a.href;
+                });
+            }
 
-            // --- E. Weather & Wind ---
+            // E. Weather & Wind
             let weather = "Temperatuur puudub";
             let wind = null;
             const bodyText = doc.body.textContent || ""; 
-            
             const weatherMatch = bodyText.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
             if (weatherMatch) weather = weatherMatch[0];
-
             const windMatch = bodyText.match(/(\d+(?:[.,]\d+)?\s?m\/s)/);
             if (windMatch) wind = windMatch[0];
 
-            // --- F. Last Comment ---
+            // F. Last Comment
             let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
             const commentList = doc.querySelector('.comment-list, .comments-area, ol.comments');
             let firstComment = null;
-
-            if (commentList) {
-                firstComment = commentList.querySelector('li, .comment-body, article');
-            } else {
-                firstComment = doc.querySelector('.comment-body');
-            }
+            if (commentList) firstComment = commentList.querySelector('li, .comment-body, article');
+            else firstComment = doc.querySelector('.comment-body');
 
             if (firstComment) {
                 const junk = firstComment.querySelectorAll('.reply, .comment-reply-link, button');
                 junk.forEach(j => j.remove());
-
                 lastComment.text = firstComment.innerText.trim();
-
                 const meta = firstComment.querySelector('.comment-metadata, .comment-meta, time');
-                if (meta) {
-                    lastComment.date = meta.innerText.trim();
-                }
-
+                if (meta) lastComment.date = meta.innerText.trim();
                 if (!lastComment.date) {
                     const dateMatch = firstComment.innerText.match(/([a-zA-Zäõüö]+\s+\d{1,2},?\s+\d{4})/i);
-                    if (dateMatch) {
-                        lastComment.date = dateMatch[0];
-                    }
+                    if (dateMatch) lastComment.date = dateMatch[0];
                 }
-                
                 lastComment.timestamp = parseEstonianDate(lastComment.date);
             }
 
-            return { url, name, status, statusIconUrl, weather, wind, webcamUrl, lastComment };
+            return { url, name, status, statusIconUrl, weather, wind, webcamLinkUrl, videoUrl, lastComment };
 
         } catch (e) {
             console.error("Error fetching", url, e);
@@ -233,20 +266,27 @@
 
     async function init() {
         const container = document.getElementById('track-list');
-        
         const promises = trackUrls.map(url => fetchTrackData(url));
         const results = await Promise.all(promises);
         const validTracks = results.filter(r => !r.error);
         
-        // Sort DESCENDING by timestamp (Highest number/Newest date first)
-        validTracks.sort((a, b) => {
-            return b.lastComment.timestamp - a.lastComment.timestamp;
-        });
+        validTracks.sort((a, b) => b.lastComment.timestamp - a.lastComment.timestamp);
 
         container.innerHTML = '';
         if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
 
         validTracks.forEach(t => {
+            // Determine which camera button to show
+            let camButton = '';
+            
+            if (t.videoUrl) {
+                // We found an embedded stream -> Use modal
+                camButton = `<button class="badge btn-live" onclick="openVideo('${t.videoUrl}')"><span class="pulse-dot"></span> 🎥 Vaata otsepilti</button>`;
+            } else if (t.webcamLinkUrl) {
+                // We found a link only -> External link
+                camButton = `<a href="${t.webcamLinkUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>`;
+            }
+
             const html = `
                 <div class="card">
                     <div class="card-header">
@@ -257,7 +297,7 @@
                         <div class="meta-badges">
                             <span class="badge badge-weather">🌡️ ${t.weather}</span>
                             ${t.wind ? `<span class="badge badge-wind">💨 ${t.wind}</span>` : ''}
-                            ${t.webcamUrl ? `<a href="${t.webcamUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>` : ''}
+                            ${camButton}
                         </div>
                     </div>
 
