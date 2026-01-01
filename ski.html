@@ -37,7 +37,7 @@
         .comment-meta { margin-top: 10px; font-size: 0.85em; color: #888; text-align: right; border-top: 1px solid #eee; padding-top: 8px; }
         
         .loading { text-align: center; color: #666; font-style: italic; margin-top: 50px; }
-        .error { color: red; font-weight: bold; }
+        .error { color: red; font-weight: bold; text-align: center; }
     </style>
 </head>
 <body>
@@ -62,19 +62,68 @@
     
     const parseEstonianDate = (dateStr) => {
         if (!dateStr) return 0;
-        const months = {
-            'jaanuar': '01', 'veebruar': '02', 'märts': '03', 'aprill': '04', 
-            'mai': '05', 'juuni': '06', 'juuli': '07', 'august': '08', 
-            'september': '09', 'oktoober': '10', 'november': '11', 'detsember': '12'
-        };
-        let clean = dateStr.toLowerCase();
-        Object.keys(months).forEach(m => {
-            if (clean.includes(m)) clean = clean.replace(m, months[m]);
-        });
-        const parts = clean.match(/(\d{1,2})[\s\.]+(\d{1,2})[,\s]+(\d{4})/);
-        if (parts) {
-            return new Date(`${parts[3]}-${parts[2]}-${parts[1]}`).getTime();
+        let clean = dateStr.toLowerCase().trim();
+
+        // 1. Handle "Today/Yesterday" relative dates
+        const now = new Date();
+        if (clean.includes('täna') || clean.includes('today')) {
+            return now.getTime();
         }
+        if (clean.includes('eile') || clean.includes('yesterday')) {
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            return yesterday.getTime();
+        }
+
+        const months = {
+            'jaanuar': '01', 'january': '01', 'jan': '01',
+            'veebruar': '02', 'february': '02', 'feb': '02',
+            'märts': '03', 'march': '03', 'mar': '03',
+            'aprill': '04', 'april': '04', 'apr': '04',
+            'mai': '05', 'may': '05', 
+            'juuni': '06', 'june': '06', 'jun': '06',
+            'juuli': '07', 'july': '07', 'jul': '07',
+            'august': '08', 'aug': '08',
+            'september': '09', 'sep': '09',
+            'oktoober': '10', 'october': '10', 'oct': '10',
+            'november': '11', 'nov': '11',
+            'detsember': '12', 'december': '12', 'dec': '12'
+        };
+
+        // 2. Scenario A: "detsember 30, 2025" (MonthName Day, Year)
+        // This is likely what was failing before
+        const monthFirstMatch = clean.match(/([a-zA-Zäõüö]+)\s+(\d{1,2})[,\s]+(\d{4})/);
+        if (monthFirstMatch) {
+            const mName = monthFirstMatch[1];
+            const day = monthFirstMatch[2].padStart(2, '0');
+            const year = monthFirstMatch[3];
+            
+            if (months[mName]) {
+                return new Date(`${year}-${months[mName]}-${day}`).getTime();
+            }
+        }
+
+        // 3. Scenario B: "30. detsember 2025" (Day. MonthName Year)
+        const dayFirstMatch = clean.match(/(\d{1,2})[\.\s]+([a-zA-Zäõüö]+)[,\s]+(\d{4})/);
+        if (dayFirstMatch) {
+            const day = dayFirstMatch[1].padStart(2, '0');
+            const mName = dayFirstMatch[2];
+            const year = dayFirstMatch[3];
+
+            if (months[mName]) {
+                return new Date(`${year}-${months[mName]}-${day}`).getTime();
+            }
+        }
+
+        // 4. Scenario C: "30.12.2025" (Numeric)
+        const numericMatch = clean.match(/(\d{1,2})[\.\-](\d{1,2})[\.\-](\d{4})/);
+        if (numericMatch) {
+            const day = numericMatch[1].padStart(2, '0');
+            const month = numericMatch[2].padStart(2, '0');
+            const year = numericMatch[3];
+            return new Date(`${year}-${month}-${day}`).getTime();
+        }
+
         return 0;
     };
 
@@ -98,18 +147,17 @@
             // --- A. Name ---
             const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
 
-            // --- B. Status Icon (NEW) ---
+            // --- B. Status Icon ---
             let statusIconUrl = null;
             const iconImg = doc.querySelector('img[alt="Staatuse ikoon"]');
             if (iconImg) {
                 const src = iconImg.getAttribute('src');
                 if (src) {
-                    // Handle relative URLs just in case
                     statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
                 }
             }
 
-            // --- C. Status Text ("Raja olek") ---
+            // --- C. Status Text ---
             let status = "Info puudub";
             const xpath = "//*[contains(text(), 'Raja olek')]";
             const matchingElement = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
@@ -179,7 +227,7 @@
 
         } catch (e) {
             console.error("Error fetching", url, e);
-            return { error: true, url, name: url, status: "Viga andmete laadimisel" };
+            return { error: true, url, name: url, status: "Viga andmete laadimisel", lastComment: { timestamp: 0 } };
         }
     }
 
@@ -190,7 +238,10 @@
         const results = await Promise.all(promises);
         const validTracks = results.filter(r => !r.error);
         
-        validTracks.sort((a, b) => b.lastComment.timestamp - a.lastComment.timestamp);
+        // Sort DESCENDING by timestamp (Highest number/Newest date first)
+        validTracks.sort((a, b) => {
+            return b.lastComment.timestamp - a.lastComment.timestamp;
+        });
 
         container.innerHTML = '';
         if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
