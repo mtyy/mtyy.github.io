@@ -79,34 +79,44 @@
 
     // --- 3. MAIN LOGIC ---
 
-    async function fetchTrackData(url) {
+async function fetchTrackData(url) {
         try {
-            // Use AllOrigins proxy to bypass CORS
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            const data = await response.json();
+            // SWITCHED TO CORSPROXY.IO
+            // Note: This proxy returns the RAW HTML string, not a JSON object.
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
             
-            if (!data.contents) throw new Error("No content");
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+            
+            // Get raw text directly
+            const htmlText = await response.text(); 
+            
+            if (!htmlText || htmlText.length < 100) throw new Error("Empty or invalid content");
 
-            // Parse the HTML string using the browser's DOMParser
             const parser = new DOMParser();
-            const doc = parser.parseFromString(data.contents, "text/html");
+            const doc = parser.parseFromString(htmlText, "text/html");
 
-            // A. Extract Name
+            // --- Parsing Logic (Same as before) ---
+
+            // A. Name
             const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
 
-            // B. Extract Status ("Raja olek")
-            // Iterate through all elements to find the label, as classes are generic
+            // B. Status ("Raja olek")
             let status = "Info puudub";
-            const allElements = doc.body.getElementsByTagName('*');
-            for (let el of allElements) {
-                if (el.innerText && el.innerText.includes('Raja olek:')) {
-                    // Get text, split by newline to avoid grabbing the whole page
-                    const lines = el.innerText.split('\n');
-                    const statusLine = lines.find(l => l.includes('Raja olek:'));
-                    if (statusLine) {
-                        status = statusLine.replace('Raja olek:', '').trim();
-                        break; 
+            // Optimization: select only likely containers to speed up loop
+            const contentDiv = doc.querySelector('.content') || doc.body;
+            const statusNode = Array.from(contentDiv.querySelectorAll('*')).find(el => 
+                el.innerText && el.innerText.includes('Raja olek:') && el.children.length === 0
+            );
+            
+            if (statusNode) {
+                 status = statusNode.innerText.replace('Raja olek:', '').trim();
+            } else {
+                // Fallback loop if specific node not found
+                for (let el of doc.body.getElementsByTagName('*')) {
+                    if (el.innerText && el.innerText.includes('Raja olek:')) {
+                         status = el.innerText.split('\n')[0].replace('Raja olek:', '').trim();
+                         break;
                     }
                 }
             }
@@ -120,31 +130,24 @@
 
             // D. Weather
             let weather = "Temperatuur puudub";
-            // Regex to find things like "-2.5 °C" in the text
             const textContent = doc.body.innerText;
             const weatherMatch = textContent.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
             if (weatherMatch) weather = weatherMatch[0];
 
             // E. Last Comment
             let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
-            
-            // Try to find the comment block. 
-            // Terviserajad uses WordPress comments, often class="comment-body" or similar
             const commentBlock = doc.querySelector('.comment-body') || doc.querySelector('.comment');
             
             if (commentBlock) {
-                // Remove button texts like "Vasta" if they exist
                 const buttons = commentBlock.querySelectorAll('.reply, button, .btn');
                 buttons.forEach(b => b.remove());
 
-                lastComment.text = commentBlock.innerText.trim().split('\n')[0]; // First line is usually the text
+                lastComment.text = commentBlock.innerText.trim().split('\n')[0];
                 
-                // Try to find author/date
                 const meta = commentBlock.querySelector('.comment-meta') || commentBlock.querySelector('footer');
                 if (meta) {
                     lastComment.date = meta.innerText.trim();
                 } else {
-                    // Fallback: look for date pattern in the full text
                     const dateMatch = commentBlock.innerText.match(/\w+\s\d{1,2},\s\d{4}/);
                     if (dateMatch) lastComment.date = dateMatch[0];
                 }
@@ -155,7 +158,7 @@
 
         } catch (e) {
             console.error("Error fetching", url, e);
-            return { error: true, url, name: url };
+            return { error: true, url, name: url, status: "Viga andmete laadimisel" };
         }
     }
 
