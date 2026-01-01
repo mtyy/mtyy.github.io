@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terviserajad Live</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; padding: 20px; color: #1c1e21; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; color: #1877f2; margin-bottom: 30px; }
+        
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .card h2 { margin: 0; font-size: 1.4em; }
+        .card h2 a { color: #050505; text-decoration: none; }
+        .card h2 a:hover { text-decoration: underline; color: #1877f2; }
+        
+        .meta-badges { display: flex; gap: 10px; flex-wrap: wrap; }
+        .badge { padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; }
+        .badge-weather { background: #e3f2fd; color: #0d47a1; }
+        .badge-cam { background: #ffebee; color: #c62828; text-decoration: none; }
+        
+        .status-section { background: #f0f9ff; border-left: 5px solid #2196f3; padding: 12px; margin: 15px 0; border-radius: 4px; }
+        .status-label { font-weight: bold; display: block; margin-bottom: 4px; color: #555; font-size: 0.8em; text-transform: uppercase; }
+        .status-text { font-size: 1.1em; font-weight: 500; }
+
+        .comment-section { margin-top: 15px; background: #f9f9f9; padding: 15px; border-radius: 8px; position: relative; }
+        .comment-section::before { content: "💬"; position: absolute; top: -10px; left: 10px; font-size: 20px; background: white; padding: 0 5px; border-radius: 50%; }
+        .comment-text { font-style: italic; color: #444; line-height: 1.5; }
+        .comment-meta { margin-top: 10px; font-size: 0.85em; color: #888; text-align: right; border-top: 1px solid #eee; padding-top: 8px; }
+        
+        .loading { text-align: center; color: #666; font-style: italic; margin-top: 50px; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⛷️ Suusarajad Live</h1>
+    <div id="track-list" class="loading">
+        Laen andmeid Terviserajad.ee lehelt...
+    </div>
+</div>
+
+<script>
+    // --- 1. CONFIGURATION ---
+    const trackUrls = [
+        'https://terviserajad.ee/rajad/pirita-valgustatud-terviserajad/',
+        'https://terviserajad.ee/rajad/vaela-terviserada/',
+        'https://terviserajad.ee/rajad/korvemaa-matka-ja-suusakeskus/',
+        'https://terviserajad.ee/rajad/nomme-harku-terviserada/'
+    ];
+
+    // --- 2. HELPERS ---
+    
+    // Convert Estonian dates to JS Timestamp
+    const parseEstonianDate = (dateStr) => {
+        if (!dateStr) return 0;
+        const months = {
+            'jaanuar': '01', 'veebruar': '02', 'märts': '03', 'aprill': '04', 
+            'mai': '05', 'juuni': '06', 'juuli': '07', 'august': '08', 
+            'september': '09', 'oktoober': '10', 'november': '11', 'detsember': '12'
+        };
+        let clean = dateStr.toLowerCase();
+        // Replace month names
+        Object.keys(months).forEach(m => {
+            if (clean.includes(m)) clean = clean.replace(m, months[m]);
+        });
+        // Attempt to extract YYYY-MM-DD parts
+        const parts = clean.match(/(\d{1,2})[\s\.]+(\d{1,2})[,\s]+(\d{4})/);
+        if (parts) {
+            // parts[3]=Year, parts[2]=Month, parts[1]=Day
+            return new Date(`${parts[3]}-${parts[2]}-${parts[1]}`).getTime();
+        }
+        return 0;
+    };
+
+    // --- 3. MAIN LOGIC ---
+
+    async function fetchTrackData(url) {
+        try {
+            // Use AllOrigins proxy to bypass CORS
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            const data = await response.json();
+            
+            if (!data.contents) throw new Error("No content");
+
+            // Parse the HTML string using the browser's DOMParser
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(data.contents, "text/html");
+
+            // A. Extract Name
+            const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
+
+            // B. Extract Status ("Raja olek")
+            // Iterate through all elements to find the label, as classes are generic
+            let status = "Info puudub";
+            const allElements = doc.body.getElementsByTagName('*');
+            for (let el of allElements) {
+                if (el.innerText && el.innerText.includes('Raja olek:')) {
+                    // Get text, split by newline to avoid grabbing the whole page
+                    const lines = el.innerText.split('\n');
+                    const statusLine = lines.find(l => l.includes('Raja olek:'));
+                    if (statusLine) {
+                        status = statusLine.replace('Raja olek:', '').trim();
+                        break; 
+                    }
+                }
+            }
+
+            // C. Webcam
+            let webcamUrl = null;
+            const links = doc.querySelectorAll('a');
+            links.forEach(a => {
+                if (a.innerText.toLowerCase().includes('otsepilt')) webcamUrl = a.href;
+            });
+
+            // D. Weather
+            let weather = "Temperatuur puudub";
+            // Regex to find things like "-2.5 °C" in the text
+            const textContent = doc.body.innerText;
+            const weatherMatch = textContent.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
+            if (weatherMatch) weather = weatherMatch[0];
+
+            // E. Last Comment
+            let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
+            
+            // Try to find the comment block. 
+            // Terviserajad uses WordPress comments, often class="comment-body" or similar
+            const commentBlock = doc.querySelector('.comment-body') || doc.querySelector('.comment');
+            
+            if (commentBlock) {
+                // Remove button texts like "Vasta" if they exist
+                const buttons = commentBlock.querySelectorAll('.reply, button, .btn');
+                buttons.forEach(b => b.remove());
+
+                lastComment.text = commentBlock.innerText.trim().split('\n')[0]; // First line is usually the text
+                
+                // Try to find author/date
+                const meta = commentBlock.querySelector('.comment-meta') || commentBlock.querySelector('footer');
+                if (meta) {
+                    lastComment.date = meta.innerText.trim();
+                } else {
+                    // Fallback: look for date pattern in the full text
+                    const dateMatch = commentBlock.innerText.match(/\w+\s\d{1,2},\s\d{4}/);
+                    if (dateMatch) lastComment.date = dateMatch[0];
+                }
+                lastComment.timestamp = parseEstonianDate(lastComment.date);
+            }
+
+            return { url, name, status, weather, webcamUrl, lastComment };
+
+        } catch (e) {
+            console.error("Error fetching", url, e);
+            return { error: true, url, name: url };
+        }
+    }
+
+    async function init() {
+        const container = document.getElementById('track-list');
+        
+        // Fetch all in parallel
+        const promises = trackUrls.map(url => fetchTrackData(url));
+        const results = await Promise.all(promises);
+
+        // Filter out errors and Sort
+        const validTracks = results.filter(r => !r.error);
+        
+        // Sort: Newest comment first
+        validTracks.sort((a, b) => b.lastComment.timestamp - a.lastComment.timestamp);
+
+        // Render
+        container.innerHTML = '';
+        if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
+
+        validTracks.forEach(t => {
+            const html = `
+                <div class="card">
+                    <div class="card-header">
+                        <h2><a href="${t.url}" target="_blank">${t.name}</a></h2>
+                        <div class="meta-badges">
+                            <span class="badge badge-weather">${t.weather}</span>
+                            ${t.webcamUrl ? `<a href="${t.webcamUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="status-section">
+                        <span class="status-label">Raja olek</span>
+                        <div class="status-text">${t.status}</div>
+                    </div>
+
+                    <div class="comment-section">
+                        <div class="comment-text">"${t.lastComment.text.substring(0, 300)}${t.lastComment.text.length > 300 ? '...' : ''}"</div>
+                        <div class="comment-meta">
+                            — ${t.lastComment.date || 'Kuupäev puudub'} <br>
+                            <a href="${t.url}" target="_blank">Vaata originaali</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+        });
+    }
+
+    init();
+</script>
+
+</body>
+</html>
