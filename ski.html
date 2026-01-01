@@ -79,9 +79,9 @@
 
     // --- 3. MAIN LOGIC ---
 
-async function fetchTrackData(url) {
+    async function fetchTrackData(url) {
         try {
-            
+            // !!! UPDATE THIS LINE if your worker URL changes !!!
             const myWorker = 'https://yellow-lake-18bc.mty-metal.workers.dev/'; 
             
             const proxyUrl = `${myWorker}?url=${encodeURIComponent(url)}`;
@@ -96,29 +96,34 @@ async function fetchTrackData(url) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlText, "text/html");
 
-            // --- Parsing Logic (Same as before) ---
+            // --- Parsing Logic ---
 
             // A. Name
             const name = doc.querySelector('h1') ? doc.querySelector('h1').innerText.trim() : 'Nimetu rada';
 
-            // B. Status ("Raja olek")
+            // B. Status ("Raja olek") - IMPROVED SELECTOR
             let status = "Info puudub";
-            // Optimization: select only likely containers to speed up loop
-            const contentDiv = doc.querySelector('.content') || doc.body;
-            const statusNode = Array.from(contentDiv.querySelectorAll('*')).find(el => 
-                el.innerText && el.innerText.includes('Raja olek:') && el.children.length === 0
-            );
             
-            if (statusNode) {
-                 status = statusNode.innerText.replace('Raja olek:', '').trim();
-            } else {
-                // Fallback loop if specific node not found
-                for (let el of doc.body.getElementsByTagName('*')) {
-                    if (el.innerText && el.innerText.includes('Raja olek:')) {
-                         status = el.innerText.split('\n')[0].replace('Raja olek:', '').trim();
-                         break;
+            // Strategy 1: Look for exact text match in common elements
+            const elements = doc.querySelectorAll('p, div, span, li');
+            for (let el of elements) {
+                if (el.innerText && el.innerText.includes('Raja olek:')) {
+                    // Get the text, remove the label
+                    let text = el.innerText.replace('Raja olek:', '').trim();
+                    // Sometimes the status is on the next line or has extra whitespace
+                    if (text.length > 2) { 
+                        status = text.split('\n')[0]; // Take first valid line
+                        break; 
                     }
                 }
+            }
+            
+            // Strategy 2: If simple replace didn't work (empty string), try next sibling
+            if (status === "Info puudub" || status === "") {
+                 const label = Array.from(doc.querySelectorAll('*')).find(el => el.innerText === 'Raja olek:');
+                 if (label && label.nextSibling) {
+                     status = label.nextSibling.textContent.trim();
+                 }
             }
 
             // C. Webcam
@@ -134,20 +139,35 @@ async function fetchTrackData(url) {
             const weatherMatch = textContent.match(/([-+]?\d{1,2}[.,]\d\s?°C)/);
             if (weatherMatch) weather = weatherMatch[0];
 
-            // E. Last Comment
+            // E. Last Comment - IMPROVED SELECTOR
             let lastComment = { text: "Kommentaare pole", author: "", date: "", timestamp: 0 };
-            const commentBlock = doc.querySelector('.comment-body') || doc.querySelector('.comment');
+            
+            // Terviserajad often uses standard WordPress comment structure
+            // Try specific classes first
+            const commentBlock = doc.querySelector('.comment-body') || 
+                                 doc.querySelector('.comment-content') || 
+                                 doc.querySelector('.comment');
             
             if (commentBlock) {
-                const buttons = commentBlock.querySelectorAll('.reply, button, .btn');
-                buttons.forEach(b => b.remove());
+                // Remove clutter (reply buttons, etc)
+                const junk = commentBlock.querySelectorAll('.reply, button, .btn, .comment-reply-link');
+                junk.forEach(b => b.remove());
 
-                lastComment.text = commentBlock.innerText.trim().split('\n')[0];
+                // Get text
+                lastComment.text = commentBlock.innerText.trim();
+                // If text is huge, take first paragraph
+                const p = commentBlock.querySelector('p');
+                if (p) lastComment.text = p.innerText.trim();
+
+                // Get Meta (Author/Date)
+                const meta = commentBlock.querySelector('.comment-meta') || 
+                             commentBlock.querySelector('.comment-metadata') ||
+                             commentBlock.querySelector('footer');
                 
-                const meta = commentBlock.querySelector('.comment-meta') || commentBlock.querySelector('footer');
                 if (meta) {
-                    lastComment.date = meta.innerText.trim();
+                    lastComment.date = meta.innerText.replace(/\s+/g, ' ').trim();
                 } else {
+                    // Fallback: look for date pattern in the block text
                     const dateMatch = commentBlock.innerText.match(/\w+\s\d{1,2},\s\d{4}/);
                     if (dateMatch) lastComment.date = dateMatch[0];
                 }
