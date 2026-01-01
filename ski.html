@@ -36,14 +36,51 @@
         .btn-live:hover { background: #ffcdd2; }
         .pulse-dot { width: 8px; height: 8px; background: red; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
         
-        .status-section { background: #f0f9ff; border-left: 5px solid #2196f3; padding: 12px; margin: 15px 0; border-radius: 4px; }
-        .status-label { font-weight: bold; display: block; margin-bottom: 4px; color: #555; font-size: 0.8em; text-transform: uppercase; }
-        .status-text { font-size: 1.1em; font-weight: 500; }
+        /* STATUS SECTION STYLES */
+        .status-section { 
+            background: #f0f9ff; 
+            border-left: 5px solid #2196f3; 
+            padding: 12px; 
+            margin: 15px 0; 
+            border-radius: 4px; 
+            text-align: left; /* Ensure container is left aligned */
+        }
+        
+        .status-text { 
+            font-size: 1.05em; 
+            line-height: 1.5; 
+            text-align: left; /* Explicit left alignment */
+        }
+        .status-text div { margin-bottom: 6px; } 
+        .status-text .font-semibold { font-weight: 700; color: #333; }
 
-        .comment-section { margin-top: 15px; background: #f9f9f9; padding: 15px; border-radius: 8px; position: relative; }
+        /* COMMENT SECTION STYLES */
+        .comment-section { 
+            margin-top: 15px; 
+            background: #f9f9f9; 
+            padding: 15px; 
+            border-radius: 8px; 
+            position: relative; 
+            text-align: left; /* Explicit left alignment */
+        }
         .comment-section::before { content: "💬"; position: absolute; top: -10px; left: 10px; font-size: 20px; background: white; padding: 0 5px; border-radius: 50%; }
-        .comment-text { font-style: italic; color: #444; line-height: 1.5; white-space: pre-line; }
-        .comment-meta { margin-top: 10px; font-size: 0.85em; color: #888; text-align: right; border-top: 1px solid #eee; padding-top: 8px; }
+        
+        .comment-text { 
+            font-style: italic; 
+            color: #444; 
+            line-height: 1.5; 
+            white-space: pre-line; 
+            text-align: left; /* Explicit left alignment */
+        }
+        
+        .comment-meta { 
+            margin-top: 10px; 
+            font-size: 0.85em; 
+            color: #888; 
+            text-align: left; /* Changed from right to left */
+            border-top: 1px solid #eee; 
+            padding-top: 8px; 
+        }
         
         .loading { text-align: center; color: #666; font-style: italic; margin-top: 50px; }
         .error { color: red; font-weight: bold; text-align: center; }
@@ -146,12 +183,9 @@
         const modal = document.getElementById('video-modal');
         const iframe = document.getElementById('video-frame');
         
-        // Ensure standard YouTube/Vimeo URLs allow embedding
-        // (Sometimes src comes in without https: or needs autoplay tweaks)
         let cleanUrl = url;
         if (cleanUrl.startsWith('//')) cleanUrl = 'https:' + cleanUrl;
         
-        // Auto-play tweak for youtube
         if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
             cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + 'autoplay=1';
         }
@@ -164,7 +198,7 @@
         const modal = document.getElementById('video-modal');
         const iframe = document.getElementById('video-frame');
         modal.style.display = 'none';
-        iframe.src = ''; // Stop video playback
+        iframe.src = ''; 
     }
 
     // --- 4. MAIN FETCH LOGIC ---
@@ -194,31 +228,38 @@
                 if (src) statusIconUrl = src.startsWith('http') ? src : `https://terviserajad.ee${src}`;
             }
 
-            // C. Status Text
+            // C. Status Info Block
             let status = "Info puudub";
-            const xpath = "//*[contains(text(), 'Raja olek')]";
-            const matchingElement = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            if (matchingElement) {
-                let fullText = matchingElement.textContent.trim();
-                if (fullText.length < 15) fullText = matchingElement.parentElement ? matchingElement.parentElement.textContent.trim() : fullText;
-                status = fullText.replace(/Raja olek:?/i, '').trim();
-                if (!status && matchingElement.nextElementSibling) status = matchingElement.nextElementSibling.textContent.trim();
+            const contentBox = doc.querySelector('.bg-content-box1');
+            
+            if (contentBox) {
+                const allDivs = Array.from(contentBox.querySelectorAll('div'));
+                const wrapperDiv = allDivs.find(d => d.innerText.includes('Raja olek'));
+                
+                if (wrapperDiv) {
+                    status = wrapperDiv.innerHTML;
+                }
+            } 
+
+            // Fallback
+            if (status === "Info puudub") {
+                const label = doc.evaluate("//*[contains(text(), 'Raja olek')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                if (label && label.parentElement && label.parentElement.parentElement) {
+                     status = label.parentElement.parentElement.innerHTML;
+                }
             }
 
-            // D. Webcam / Live Video Detection
-            // 1. Look for the modal that the button triggers (modal--live-feed)
+            // D. Webcam
             let videoUrl = null;
             const modalDiv = doc.getElementById('modal--live-feed');
             
             if (modalDiv) {
                 const iframe = modalDiv.querySelector('iframe');
                 if (iframe) {
-                    // Check src or data-src (lazy loading)
                     videoUrl = iframe.getAttribute('src') || iframe.getAttribute('data-src');
                 }
             }
 
-            // Fallback: If no modal logic, look for simple links
             let webcamLinkUrl = null;
             if (!videoUrl) {
                 const links = doc.querySelectorAll('a');
@@ -276,14 +317,11 @@
         if (validTracks.length === 0) container.innerHTML = '<div class="error">Ei saanud andmeid kätte. Proovi hiljem uuesti.</div>';
 
         validTracks.forEach(t => {
-            // Determine which camera button to show
             let camButton = '';
             
             if (t.videoUrl) {
-                // We found an embedded stream -> Use modal
                 camButton = `<button class="badge btn-live" onclick="openVideo('${t.videoUrl}')"><span class="pulse-dot"></span> 🎥 Vaata otsepilti</button>`;
             } else if (t.webcamLinkUrl) {
-                // We found a link only -> External link
                 camButton = `<a href="${t.webcamLinkUrl}" target="_blank" class="badge badge-cam">📷 Otsepilt</a>`;
             }
 
@@ -302,7 +340,6 @@
                     </div>
 
                     <div class="status-section">
-                        <span class="status-label">Raja olek</span>
                         <div class="status-text">${t.status}</div>
                     </div>
 
