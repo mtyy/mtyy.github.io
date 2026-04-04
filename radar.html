@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="utf-8">
+    <title>Estonia Radar</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100%; 
+            font-family: Arial, sans-serif; 
+            background: #eef1f5;
+        }
+        #map { 
+            height: 100vh; 
+            width: 100vw; 
+        }
+        #controls {
+            position: absolute; 
+            bottom: 40px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            z-index: 1000; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 15px 25px;
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex; 
+            align-items: center; 
+            gap: 20px; 
+            width: 90%; 
+            max-width: 600px;
+        }
+        #play-btn {
+            background: #0078d7;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 80px;
+        }
+        #play-btn:hover { background: #005a9e; }
+        #slider { 
+            flex-grow: 1; 
+            cursor: pointer;
+        }
+        #time-display { 
+            font-weight: bold; 
+            font-size: 1.1rem;
+            min-width: 60px; 
+            text-align: right; 
+            color: #333;
+        }
+
+        /* Location Marker Styles */
+        .location-marker {
+            position: relative;
+            width: 20px;
+            height: 20px;
+        }
+        .location-dot {
+            width: 14px;
+            height: 14px;
+            background-color: #2196F3;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+        .location-heading {
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 24px solid #2196F3;
+            position: absolute;
+            top: -12px;
+            left: 2px;
+            transform-origin: 8px 22px;
+            display: none;
+            z-index: 1;
+            filter: drop-shadow(0 -2px 2px rgba(0,0,0,0.3));
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    
+    <div id="controls">
+        <button id="play-btn">Play</button>
+        <input type="range" id="slider" min="0" max="23" value="23" step="1">
+        <div id="time-display">...</div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. Initialize the Map centered on general Estonia
+        const map = L.map('map').setView([58.59, 25.01], 7);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 10
+        }).addTo(map);
+
+        // 2. Calculate timestamps
+        const timestamps = [];
+        const displayTimes = [];
+        
+        let now = new Date();
+        now.setMinutes(now.getMinutes() - 10);
+        now.setMinutes(Math.floor(now.getMinutes() / 5) * 5);
+        now.setSeconds(0);
+        now.setMilliseconds(0);
+
+        for (let i = 23; i >= 0; i--) {
+            let d = new Date(now.getTime() - (i * 5 * 60000));
+            timestamps.push(d.toISOString()); 
+            
+            let hours = d.getHours().toString().padStart(2, '0');
+            let mins = d.getMinutes().toString().padStart(2, '0');
+            displayTimes.push(`${hours}:${mins}`);
+        }
+
+        // 3. WMS Radar Layer
+        const radarLayer = L.tileLayer.wms('https://ilmgs.envir.ee/geoserver/ilm/wms', {
+            layers: 'ilm:cmp_cap',
+            format: 'image/png',
+            transparent: true,
+            opacity: 0.65,
+            maxZoom: 10
+        }).addTo(map);
+
+        // 4. UI Controls
+        const slider = document.getElementById('slider');
+        const timeDisplay = document.getElementById('time-display');
+        const playBtn = document.getElementById('play-btn');
+        
+        function updateMap(index) {
+            const timeString = timestamps[index];
+            timeDisplay.innerText = displayTimes[index];
+            radarLayer.setParams({ time: timeString });
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateMap(e.target.value);
+        });
+
+        updateMap(23);
+
+        // 5. Animation Logic
+        let playInterval;
+        playBtn.addEventListener('click', () => {
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+                playBtn.innerText = 'Play';
+            } else {
+                playBtn.innerText = 'Pause';
+                playInterval = setInterval(() => {
+                    let val = parseInt(slider.value);
+                    val = (val >= 23) ? 0 : val + 1; 
+                    slider.value = val;
+                    updateMap(val);
+                }, 1000); 
+            }
+        });
+
+        // 6. Geolocation & Heading Tracking
+        const locationIcon = L.divIcon({
+            className: '',
+            html: `<div class="location-marker">
+                       <div class="location-heading" id="heading-cone"></div>
+                       <div class="location-dot"></div>
+                   </div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        let userMarker = null;
+
+        // Request user location; map view will NOT change automatically unless you add setView: true
+        map.locate({ watch: true, enableHighAccuracy: true });
+
+        // Only inject the marker onto the map when a real location is verified
+        map.on('locationfound', function(e) {
+            if (!userMarker) {
+                userMarker = L.marker(e.latlng, { icon: locationIcon, zIndexOffset: 1000 }).addTo(map);
+            } else {
+                userMarker.setLatLng(e.latlng);
+            }
+
+            const headingEl = document.getElementById('heading-cone');
+            if (headingEl) {
+                if (e.heading !== null && !isNaN(e.heading)) {
+                    headingEl.style.display = 'block';
+                    headingEl.style.transform = `rotate(${e.heading}deg)`;
+                } else {
+                    headingEl.style.display = 'none';
+                }
+            }
+        });
+
+        map.on('locationerror', function(e) {
+            console.warn("Location unavailable: ", e.message);
+        });
+    </script>
+</body>
+</html>
