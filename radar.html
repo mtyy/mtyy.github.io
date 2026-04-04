@@ -131,30 +131,41 @@
             displayTimes.push(`${hours}:${mins}`);
         }
 
-        // 3. WMS Radar Layer
-        const radarLayer = L.tileLayer.wms('https://ilmgs.envir.ee/geoserver/ilm/wms', {
-            layers: 'ilm:cmp_cap',
-            format: 'image/png',
-            transparent: true,
-            opacity: 0.65,
-            maxZoom: 10
-        }).addTo(map);
+        // 3. Preload all WMS Radar Layers
+        const radarLayers = [];
+        for (let i = 0; i < 24; i++) {
+            radarLayers.push(L.tileLayer.wms('https://ilmgs.envir.ee/geoserver/ilm/wms', {
+                layers: 'ilm:cmp_cap',
+                format: 'image/png',
+                transparent: true,
+                opacity: 0, // Keep hidden until active
+                time: timestamps[i],
+                maxZoom: 10
+            }).addTo(map));
+        }
 
         // 4. UI Controls
         const slider = document.getElementById('slider');
         const timeDisplay = document.getElementById('time-display');
         const playBtn = document.getElementById('play-btn');
         
+        let activeIndex = 23;
+        
         function updateMap(index) {
-            const timeString = timestamps[index];
             timeDisplay.innerText = displayTimes[index];
-            radarLayer.setParams({ time: timeString });
+            
+            // Hide previous layer, show new layer
+            radarLayers[activeIndex].setOpacity(0);
+            radarLayers[index].setOpacity(0.65);
+            
+            activeIndex = index;
         }
 
         slider.addEventListener('input', (e) => {
             updateMap(e.target.value);
         });
 
+        // Initialize the first view
         updateMap(23);
 
         // 5. Animation Logic
